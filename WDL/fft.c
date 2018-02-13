@@ -1024,10 +1024,9 @@ int *WDL_fft_permute_tab(int fftsize)
   return _idxperm + fftsize - 2;
 }
 
-
 #endif
 
-void WDL_fft_init()
+int WDL_fft_init()
 {
   static int ffttabinit;
   if (!ffttabinit)
@@ -1059,7 +1058,9 @@ void WDL_fft_init()
 	  }
 #endif
 
+    return 0;
   }
+  return ffttabinit;
 }
 
 void WDL_fft(WDL_FFT_COMPLEX *buf, int len, int isInverse)
