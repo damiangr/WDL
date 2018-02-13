@@ -70,6 +70,10 @@ extern void WDL_real_fft(void *, int len, int isInverse);
 extern int WDL_fft_permute(int fftsize, int idx);
 extern int *WDL_fft_permute_tab(int fftsize);
 
+/* #define WDL_FFT_EXPORT_SINCOS to export sin/cos tables. For len <= 512
+returns tab[len/4-2], for len >= 1024 returns tab[len/8-2]. */
+extern WDL_FFT_COMPLEX *WDL_fft_sincos_tab(int len);
+
 #ifdef __cplusplus
 };
 #endif

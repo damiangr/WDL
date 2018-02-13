@@ -1001,6 +1001,16 @@ static void fft_gen(WDL_FFT_COMPLEX *buf, const WDL_FFT_COMPLEX *buf2, int sz, i
   }
 }
 
+#ifdef WDL_FFT_EXPORT_SINCOS
+WDL_FFT_COMPLEX *WDL_fft_sincos_tab(int len)
+{
+  int i;
+  len >>= 5;
+  for (i = 0; len > 0; ++i, len = (unsigned int)len >> 1);
+  return dptr[i];
+}
+#endif
+
 #ifndef WDL_FFT_NO_PERMUTE
 
 static unsigned int fftfreq_c(unsigned int i,unsigned int n)
