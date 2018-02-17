@@ -65,7 +65,7 @@ extern void WDL_fft(WDL_FFT_COMPLEX *, int len, int isInverse);
 WDL_FFT_COMPLEX output[0..len/2-1], for len >= 4 order by
 WDL_fft_permute(len/2). Note that output[len/2].re is stored in
 output[0].im. */
-extern void WDL_real_fft(WDL_FFT_REAL *, int len, int isInverse);
+extern void WDL_real_fft(void *, int len, int isInverse);
 
 extern int WDL_fft_permute(int fftsize, int idx);
 extern int *WDL_fft_permute_tab(int fftsize);

@@ -1416,7 +1416,7 @@ static void v32768(register WDL_FFT_REAL *a)
   u16384((WDL_FFT_COMPLEX *)a);
 }
 
-void WDL_real_fft(WDL_FFT_REAL* buf, int len, int isInverse)
+void WDL_real_fft(void* buf, int len, int isInverse)
 {
   switch (len)
   {
