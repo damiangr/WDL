@@ -979,27 +979,155 @@ static void u32768(register WDL_FFT_COMPLEX *a)
 }
 
 
+/* #define WDL_FFT_WANT_FULLPRECISION_SINCOS to do intermediate calculations
+for double-precision sin/cos tables in higher precision (fixes rounding
+errors i.e. difference of 10^-16). */
+
+#if defined(WDL_FFT_WANT_FULLPRECISION_SINCOS) && WDL_FFT_REALSIZE == 8
+
+#if defined(_MSC_VER) && defined(_M_IX86)
+#define WDL_FFT_GEN_INLINE_MASM_X86
+
+#elif defined(_MSC_VER) && (defined(_M_IX64) || defined(_M_AMD64))
+#define WDL_FFT_GEN_LINK_EXTERN /* See fft_gen_x64.asm */
+
+#else /* !_MSC_VER */
+#define WDL_FFT_GEN_C99_LONG_DOUBLE
+#endif
+
+#endif /* WDL_FFT_WANT_FULLPRECISION_SINCOS */
+
+#ifdef WDL_FFT_GEN_LINK_EXTERN
+extern void WDL_fft_gen_extern(WDL_FFT_COMPLEX *, const WDL_FFT_COMPLEX *, int, int);
+#else
 static void fft_gen(WDL_FFT_COMPLEX *buf, const WDL_FFT_COMPLEX *buf2, int sz, int isfull)
+#endif
+#ifdef WDL_FFT_GEN_INLINE_MASM_X86
 {
+  int x, y, cw;
+
+  __asm
+  {
+    /* cw = _control87(0, 0); */
+    wait
+    fnstcw word ptr [cw]
+
+    /* _control87(_PC_64, _MCW_PC); */
+    movzx ecx, word ptr [cw]
+    mov eax, ecx
+    or ah, 03h
+    mov dword ptr [cw], eax
+    fldcw word ptr [cw]
+    mov dword ptr [cw], ecx
+
+    mov edi, dword ptr [buf]
+    mov esi, dword ptr [buf2]
+
+    /* y=(sz+1)*2; */
+    mov ecx, dword ptr [sz]
+    mov eax, ecx
+    inc eax
+    shl eax, 1
+
+    /* if (!isfull) y*=2 */
+    mov edx, eax
+    shl edx, 1
+    cmp dword ptr [isfull], 0
+    cmovz eax, edx
+    mov dword ptr [y], eax
+
+    /* for (x = 0; x < sz; x ++) */
+    xor eax, eax
+    align 8
+  label_1:
+    inc eax
+
+    /* if (!(x & 1) || !buf2) */
+    test al, 1
+    jnz label_2
+    or esi, esi
+    jz label_2
+
+    /* *((double*)buf)++ = *((double*)buf2)++; */
+    fld qword ptr [esi]
+    add esi, 8
+    fstp qword ptr [edi]
+    add edi, 8
+
+    /* *((double*)buf)++ = *((double*)buf2)++; */
+    fld qword ptr [esi]
+    add esi, 8
+    fstp qword ptr [edi]
+    add edi, 8
+
+    cmp eax, ecx
+    jl label_1
+    jmp label_3
+
+    align 8
+  label_2:
+    /* long double tmp = (long double) (x+1)/y*pi); */
+    mov dword ptr [x], eax
+    fild dword ptr [x]
+    fidiv dword ptr [y]
+    fldpi
+    fmul
+    fsincos
+
+    /* *((double*)buf)++ = (double) cosl(tmp); */
+    fstp qword ptr [edi]
+    add edi, 8
+
+    /* *((double*)buf)++ = (double) sinl(tmp); */
+    fstp qword ptr [edi]
+    add edi, 8
+
+    cmp eax, ecx
+    jl label_1
+
+    ALIGN 8
+  label_3:
+    /* _control87(cw, _MCW_PC); */
+    fldcw word ptr [cw]
+  };
+}
+#elif !defined(WDL_FFT_GEN_LINK_EXTERN)
+{
+#ifdef WDL_FFT_GEN_C99_LONG_DOUBLE
+  long double pi=acosl(-1);
+  int x, div=(sz+1)*2;
+
+  if (!isfull) div*=2;
+#else
   int x;
   double div=PI*0.25/(sz+1);
 
   if (isfull) div*=2.0;
+#endif
 
   for (x = 0; x < sz; x ++)
   {
     if (!(x & 1) || !buf2)
     {
-      buf[x].re = (WDL_FFT_REAL) cos((x+1)*div);
-      buf[x].im = (WDL_FFT_REAL) sin((x+1)*div);
+#ifdef WDL_FFT_GEN_C99_LONG_DOUBLE
+      long double y = (long double) (x+1)/div*pi;
+      buf[x].re = (WDL_FFT_REAL) cosl(y);
+      buf[x].im = (WDL_FFT_REAL) sinl(y);
+#else
+      double y = (x+1)*div;
+      buf[x].re = (WDL_FFT_REAL) cos(y);
+      buf[x].im = (WDL_FFT_REAL) sin(y);
+#endif
     }
     else
     {
-      buf[x].re = buf2[x >> 1].re;
-      buf[x].im = buf2[x >> 1].im;
+      int y = (unsigned int) x >> 1;
+      buf[x].re = buf2[y].re;
+      buf[x].im = buf2[y].im;
     }
   }
 }
+#endif /* !WDL_FFT_GEN_LINK_EXTERN */
 
 #ifdef WDL_FFT_EXPORT_SINCOS
 WDL_FFT_COMPLEX *WDL_fft_sincos_tab(int len)
@@ -1068,7 +1196,12 @@ int WDL_fft_init()
       buf2 = buf;
       buf = dptr[i];
       if (i != 6) j = j*2 + 1;
-      fft_gen(buf, buf2, j, i < 6);
+#ifdef WDL_FFT_GEN_LINK_EXTERN
+      WDL_fft_gen_extern
+#else
+      fft_gen
+#endif
+      (buf, buf2, j, i < 6);
     }
 
 #ifndef WDL_FFT_NO_PERMUTE
